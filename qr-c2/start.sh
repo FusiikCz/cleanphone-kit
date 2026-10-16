@@ -13,8 +13,9 @@ C2_PID=$!
 trap "kill $C2_PID 2>/dev/null" EXIT
 sleep 2
 
-command -v qrencode >/dev/null || apt-get install -y qrencode >/dev/null 2>&1 || true
-qrencode -o qr.png "http://${LAN}:8080/" 2>/dev/null && echo "✅ QR: qr.png"
+command -v qrencode >/dev/null || apt-get install -y qrencode >/dev/null 2>&1 || { echo "❌ qrencode not found and install failed"; exit 1; }
+qrencode -o qr.png "http://${LAN}:8080/" || { echo "❌ QR generation failed"; exit 1; }
+echo "✅ QR: qr.png"
 
 cat <<EOF
 

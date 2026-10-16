@@ -35,8 +35,8 @@ adb devices        # musí vypsat tvé zařízení
 ## 1) Příprava C2 serveru (na Kali, ve stejné WiFi)
 
 ```bash
-cd cleanphone
-python3 c2.py
+cd cleanphone/qr-c2
+python3 c2-qr.py
 # vypíše: Dashboard http://<TVA_LAN_IP>:8080  a  Task feed /push
 ip -4 addr show | grep inet      # zjisti svou LAN IP, např. 192.168.1.50
 ```
