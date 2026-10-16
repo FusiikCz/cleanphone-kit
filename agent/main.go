@@ -1,4 +1,4 @@
-// 📱 CleanPhone Agent - staticky linked, zero dependencies
+// CleanPhone Agent - staticky linked, zero dependencies
 //
 // Dva režimy:
 //   serve  - poslouchá HTTP na portu (LAN scénář)
